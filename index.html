@@ -25,6 +25,16 @@
             -webkit-tap-highlight-color: transparent;
         }
 
+        /* Remover setas nativas dos inputs de número */
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { 
+            -webkit-appearance: none; 
+            margin: 0; 
+        }
+        input[type=number] {
+            -moz-appearance: textfield;
+        }
+
         body {
             background-color: var(--bg-color);
             color: var(--text);
@@ -528,7 +538,7 @@
         
         let nextNoteTime = 0.0;
         let timerID = null;
-        let scheduleAheadTime = 0.2; // Agendamento antecipado maior para resistir a bloqueios
+        let scheduleAheadTime = 0.2; 
         let lookahead = 25.0;
 
         function updateBeatsVisualizer() {
@@ -608,7 +618,6 @@
             osc.start(time);
             osc.stop(time + 0.05);
 
-            // Atualiza os pontos visuais se a página estiver ativa
             const audioTimeDiff = time - ctx.currentTime;
             const timeoutDelay = Math.max(0, audioTimeDiff * 1000);
             
@@ -681,7 +690,6 @@
                 ctx.resume();
             }
 
-            // Impulso inicial para destravar o canal de áudio no iOS
             const buffer = ctx.createBuffer(1, 1, ctx.sampleRate);
             const source = ctx.createBufferSource();
             source.buffer = buffer;
