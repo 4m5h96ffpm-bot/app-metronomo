@@ -2,7 +2,7 @@
 <html lang="pt">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Metrónomo e Afinador</title>
     <style>
         :root {
@@ -21,6 +21,9 @@
             margin: 0;
             padding: 0;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            /* Evita zoom e atrasos de duplo toque no iOS */
+            touch-action: manipulation; 
+            -webkit-tap-highlight-color: transparent;
         }
 
         body {
@@ -132,10 +135,6 @@
             transition: background 0.2s, transform 0.1s;
         }
 
-        .btn-step:hover {
-            background-color: #424248;
-        }
-
         .btn-step:active {
             transform: scale(0.95);
         }
@@ -165,15 +164,6 @@
             text-align: center;
             width: 120px;
             outline: none;
-        }
-
-        .tempo-input::-webkit-outer-spin-button,
-        .tempo-input::-webkit-inner-spin-button {
-            -webkit-appearance: none;
-            margin: 0;
-        }
-        .tempo-input {
-            -moz-appearance: textfield;
         }
 
         .tempo-label {
@@ -209,11 +199,6 @@
             border-radius: 6px;
             padding: 4px 8px;
             gap: 4px;
-            transition: border-color 0.2s;
-        }
-
-        .time-signature-wrapper:focus-within {
-            border-color: var(--accent);
         }
 
         .ts-input {
@@ -225,15 +210,6 @@
             text-align: center;
             width: 40px;
             outline: none;
-        }
-
-        .ts-input::-webkit-outer-spin-button,
-        .ts-input::-webkit-inner-spin-button {
-            -webkit-appearance: none;
-            margin: 0;
-        }
-        .ts-input {
-            -moz-appearance: textfield;
         }
 
         .ts-slash {
@@ -257,7 +233,6 @@
             accent-color: var(--accent);
             width: 16px;
             height: 16px;
-            cursor: pointer;
         }
 
         input[type="range"] {
@@ -283,10 +258,6 @@
             font-weight: bold;
             cursor: pointer;
             transition: background 0.2s;
-        }
-
-        button.main-action:hover {
-            background-color: var(--accent-hover);
         }
 
         .beat-visualizer {
@@ -333,7 +304,6 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: color 0.2s;
         }
 
         .tuner-details {
@@ -349,16 +319,11 @@
             position: relative;
             overflow: hidden;
             margin-top: 10px;
-            /* Gradiente na barra: Vermelho nas pontas, Amarelo na transição, Verde no centro (afinada) */
             background: linear-gradient(to right, 
-                var(--danger) 0%, 
-                var(--danger) 35%, 
-                var(--warning) 42%, 
-                var(--accent) 47%, 
-                var(--accent) 53%, 
-                var(--warning) 58%, 
-                var(--danger) 65%, 
-                var(--danger) 100%
+                var(--danger) 0%, var(--danger) 35%, 
+                var(--warning) 42%, var(--accent) 47%, 
+                var(--accent) 53%, var(--warning) 58%, 
+                var(--danger) 65%, var(--danger) 100%
             );
             box-shadow: inset 0 2px 4px rgba(0,0,0,0.4);
         }
@@ -407,10 +372,6 @@
             font-weight: bold;
             cursor: pointer;
             width: 100%;
-            transition: background 0.2s;
-        }
-        button.secondary:hover {
-            background-color: #424248;
         }
     </style>
 </head>
@@ -418,7 +379,6 @@
 
     <h1>🎵 Metrónomo & Afinador</h1>
 
-    <!-- Botões de Navegação por Separadores -->
     <div class="tabs-container">
         <button class="tab-btn active" onclick="switchTab('metronome')">Metrónomo</button>
         <button class="tab-btn" onclick="switchTab('tuner')">Afinador</button>
@@ -517,8 +477,8 @@
 
     </div>
 
-    <!-- Elemento de áudio invisível -->
-    <audio id="silentAudio" loop style="display:none;">
+    <!-- Elemento de áudio otimizado para manter o iOS acordado em background -->
+    <audio id="silentAudio" loop playsinline preload="auto" style="display:none;">
         <source src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=" type="audio/wav">
     </audio>
 
@@ -527,7 +487,8 @@
 
         function getAudioContext() {
             if (!audioCtx) {
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                audioCtx = new AudioContextClass();
             }
             if (audioCtx.state === 'suspended') {
                 audioCtx.resume();
@@ -535,7 +496,6 @@
             return audioCtx;
         }
 
-        // --- Lógica de Separadores ---
         window.switchTab = function(tabName) {
             const tabs = document.querySelectorAll('.tab-content');
             const buttons = document.querySelectorAll('.tab-btn');
@@ -615,37 +575,21 @@
         }
 
         tempoInput.addEventListener('change', applyManualInput);
-        tempoInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                applyManualInput();
-                tempoInput.blur();
-            }
-        });
         tempoInput.addEventListener('blur', applyManualInput);
 
         function applyTimeSignature() {
-            let num = parseInt(tsNumerator.value);
-            let den = parseInt(tsDenominator.value);
-
-            if (isNaN(num) || num < 1) num = 1;
-            if (num > 32) num = 32;
-            tsNumerator.value = num;
-
-            if (isNaN(den) || den < 1) den = 4;
-            if (den > 64) den = 64;
-            tsDenominator.value = den;
-
-            beatsPerMeasure = num;
-            beatUnit = den;
+            let num = parseInt(tsNumerator.value) || 4;
+            let den = parseInt(tsDenominator.value) || 4;
+            beatsPerMeasure = Math.max(1, Math.min(32, num));
+            beatUnit = Math.max(1, Math.min(64, den));
+            tsNumerator.value = beatsPerMeasure;
+            tsDenominator.value = beatUnit;
             currentBeat = 0;
             updateBeatsVisualizer();
         }
 
         tsNumerator.addEventListener('change', applyTimeSignature);
-        tsNumerator.addEventListener('blur', applyTimeSignature);
         tsDenominator.addEventListener('change', applyTimeSignature);
-        tsDenominator.addEventListener('blur', applyTimeSignature);
-
         updateBeatsVisualizer();
 
         function nextNote() {
@@ -656,13 +600,11 @@
 
         function scheduleNote(beatNumber, time) {
             const ctx = getAudioContext();
-            
             const osc = ctx.createOscillator();
             const envelope = ctx.createGain();
 
-            const useAccent = accentToggle.checked;
             osc.type = 'sine';
-            osc.frequency.value = (beatNumber === 0 && useAccent) ? 1000 : 800;
+            osc.frequency.value = (beatNumber === 0 && accentToggle.checked) ? 1000 : 800;
 
             envelope.gain.setValueAtTime(1, time);
             envelope.gain.exponentialRampToValueAtTime(0.001, time + 0.05);
@@ -680,11 +622,7 @@
                 if (!isRunning) return;
                 const dots = beatVisualizer.querySelectorAll('.dot');
                 dots.forEach((dot, index) => {
-                    if (index === beatNumber) {
-                        dot.classList.add('active');
-                    } else {
-                        dot.classList.remove('active');
-                    }
+                    dot.classList.toggle('active', index === beatNumber);
                 });
             }, timeoutDelay);
         }
@@ -704,12 +642,6 @@
                 if (e.data === 'start') {
                     if (timerID) clearInterval(timerID);
                     timerID = setInterval(() => { postMessage('tick'); }, interval);
-                } else if (e.data.interval) {
-                    interval = e.data.interval;
-                    if (timerID) {
-                        clearInterval(timerID);
-                        timerID = setInterval(() => { postMessage('tick'); }, interval);
-                    }
                 } else if (e.data === 'stop') {
                     clearInterval(timerID);
                     timerID = null;
@@ -723,21 +655,7 @@
             if ('mediaSession' in navigator) {
                 navigator.mediaSession.playbackState = 'playing';
                 navigator.mediaSession.metadata = new MediaMetadata({
-                    title: `Metrónomo (${bpm} BPM - ${beatsPerMeasure}/${beatUnit})`,
-                    artist: 'Web Metronome',
-                    album: 'Prática Musical'
-                });
-
-                navigator.mediaSession.setActionHandler('play', () => { if (!isRunning) toggleMetronome(); });
-                navigator.mediaSession.setActionHandler('pause', () => { if (isRunning) toggleMetronome(); });
-                navigator.mediaSession.setActionHandler('stop', () => { if (isRunning) toggleMetronome(); });
-            }
-        }
-
-        function updateMediaSessionMetadata() {
-            if ('mediaSession' in navigator) {
-                navigator.mediaSession.metadata = new MediaMetadata({
-                    title: `Metrónomo (${bpm} BPM - ${beatsPerMeasure}/${beatUnit})`,
+                    title: `Metrónomo (${bpm} BPM)`,
                     artist: 'Web Metronome',
                     album: 'Prática Musical'
                 });
@@ -746,7 +664,6 @@
 
         function startMetronome() {
             const ctx = getAudioContext();
-            
             wallTimeStart = performance.now();
             audioTimeStart = ctx.currentTime;
 
@@ -756,37 +673,32 @@
             if (!worker) {
                 worker = new Worker(workerUrl);
                 worker.onmessage = function(e) {
-                    if (e.data === 'tick') {
-                        scheduler();
-                    }
+                    if (e.data === 'tick') scheduler();
                 };
             }
             worker.postMessage('start');
 
-            silentAudio.play().catch(e => console.log("Áudio silencioso bloqueado", e));
+            // Garante reprodução de áudio em background no iOS
+            silentAudio.play().catch(e => console.log("Áudio silencioso impedido", e));
             setupMediaSession();
         }
 
         function stopMetronome() {
-            if (worker) {
-                worker.postMessage('stop');
-            }
+            if (worker) worker.postMessage('stop');
             currentBeat = 0;
-            
             silentAudio.pause();
             if ('mediaSession' in navigator) {
                 navigator.mediaSession.playbackState = 'none';
             }
-
-            const dots = beatVisualizer.querySelectorAll('.dot');
-            dots.forEach((dot, index) => {
-                if (index === 0) dot.classList.add('active');
-                else dot.classList.remove('active');
-            });
+            updateBeatsVisualizer();
         }
 
         function toggleMetronome() {
-            getAudioContext();
+            const ctx = getAudioContext();
+            if (ctx.state === 'suspended') {
+                ctx.resume();
+            }
+            
             isRunning = !isRunning;
             if (isRunning) {
                 startMetronome();
@@ -800,25 +712,6 @@
         }
 
         startMetronomeBtn.addEventListener('click', toggleMetronome);
-
-        document.addEventListener('visibilitychange', () => {
-            if (!document.hidden && isRunning && audioCtx) {
-                wallTimeStart = performance.now();
-                audioTimeStart = audioCtx.currentTime;
-                if (nextNoteTime < audioTimeStart) {
-                    nextNoteTime = audioTimeStart + 0.05;
-                }
-            }
-        });
-
-        const originalSetBpm = setBpm;
-        setBpm = function(newBpm) {
-            originalSetBpm(newBpm);
-            if (isRunning) {
-                updateMediaSessionMetadata();
-            }
-        };
-
 
         // --- AFINADOR ---
         const startTunerBtn = document.getElementById('startTunerBtn');
@@ -840,7 +733,7 @@
         const holdDuration = 2000; 
 
         let smoothedNeedlePos = 50; 
-        let smoothedCents = 0; // Para amortizar também o valor numérico dos cêntimos
+        let smoothedCents = 0; 
 
         sensitivitySlider.addEventListener('input', (e) => {
             sensitivityValue.textContent = parseFloat(e.target.value).toFixed(3);
@@ -864,23 +757,19 @@
         }
 
         function getCents(frequency, note) {
-            const detune = 1200 * (Math.log(frequency / getFrequencyFromNoteNumber(note)) / Math.log(2));
-            return detune;
+            return 1200 * (Math.log(frequency / getFrequencyFromNoteNumber(note)) / Math.log(2));
         }
 
         function autoCorrelate(buffer, sampleRate) {
             let SIZE = buffer.length;
             let sumOfSquares = 0;
             for (let i = 0; i < SIZE; i++) {
-                let val = buffer[i];
-                sumOfSquares += val * val;
+                sumOfSquares += buffer[i] * buffer[i];
             }
             let rootMeanSquare = Math.sqrt(sumOfSquares / SIZE);
-            const currentThreshold = parseFloat(sensitivitySlider.value);
-            if (rootMeanSquare < currentThreshold) return -1;
+            if (rootMeanSquare < parseFloat(sensitivitySlider.value)) return -1;
 
-            let r1 = 0, r2 = SIZE - 1;
-            let threshold = 0.2;
+            let r1 = 0, r2 = SIZE - 1, threshold = 0.2;
             for (let i = 0; i < SIZE / 2; i++) {
                 if (Math.abs(buffer[i]) < threshold) { r1 = i; break; }
             }
@@ -894,7 +783,7 @@
             let c = new Array(SIZE).fill(0);
             for (let i = 0; i < SIZE; i++) {
                 for (let j = 0; j < SIZE - i; j++) {
-                    c[i] = c[i] + buffer[j] * buffer[j + i];
+                    c[i] += buffer[j] * buffer[j + i];
                 }
             }
 
@@ -907,8 +796,7 @@
                     maxpos = i;
                 }
             }
-            let T0 = maxpos;
-            return sampleRate / T0;
+            return sampleRate / maxpos;
         }
 
         function updateTuner() {
@@ -932,34 +820,23 @@
                 }
             } else {
                 lastSignalTime = now;
-                const pitch = ac;
-                const note = getNoteFromPitch(pitch);
-                const noteName = noteStrings[note % 12];
-                const octave = Math.floor(note / 12) - 1;
-                const rawCents = getCents(pitch, note);
+                const note = getNoteFromPitch(ac);
+                const rawCents = getCents(ac, note);
 
-                // Amortecimento forte para evitar oscilações rápidas (fator 0.08 para máxima estabilidade)
                 smoothedCents += (rawCents - smoothedCents) * 0.08;
                 const displayCents = Math.round(smoothedCents);
 
-                tunerNote.textContent = `${noteName}${octave}`;
+                tunerNote.textContent = `${noteStrings[note % 12]}${Math.floor(note / 12) - 1}`;
                 tunerDetails.textContent = `${displayCents > 0 ? '+' : ''}${displayCents}¢`;
 
-                let targetNeedlePos = 50 + smoothedCents; 
-                if (targetNeedlePos < 0) targetNeedlePos = 0;
-                if (targetNeedlePos > 100) targetNeedlePos = 100;
-
+                let targetNeedlePos = Math.max(0, Math.min(100, 50 + smoothedCents));
                 smoothedNeedlePos += (targetNeedlePos - smoothedNeedlePos) * 0.08;
                 tunerNeedle.style.left = `${smoothedNeedlePos}%`;
 
-                // Cores dinâmicas para a caixa consoante a proximidade da afinação
                 let activeColor = "var(--danger)";
                 const absCents = Math.abs(displayCents);
-                if (absCents <= 5) {
-                    activeColor = "var(--accent)"; // Zona Verde
-                } else if (absCents <= 12) {
-                    activeColor = "var(--warning)"; // Zona Amarela
-                }
+                if (absCents <= 5) activeColor = "var(--accent)";
+                else if (absCents <= 12) activeColor = "var(--warning)";
 
                 tunerDisplayBox.style.borderColor = activeColor;
                 tunerDisplayBox.style.boxShadow = `0 0 10px ${activeColor}33`;
@@ -970,11 +847,19 @@
         }
 
         startTunerBtn.addEventListener('click', async () => {
+            // Validação de segurança do iOS (exige HTTPS ou localhost)
+            if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+                alert('O iOS restringe o microfone a ligações HTTPS. Se estiver a abrir o ficheiro localmente ("file://") ou por IP sem SSL ("http://"), o Safari bloqueará o acesso.');
+                return;
+            }
+
             const ctx = getAudioContext();
 
             if (!tunerActive) {
                 try {
-                    mediaStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+                    mediaStream = await navigator.mediaDevices.getUserMedia({ 
+                        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } 
+                    });
                     microphone = ctx.createMediaStreamSource(mediaStream);
                     analyser = ctx.createAnalyser();
                     analyser.fftSize = 4096;
@@ -992,14 +877,10 @@
                 }
             } else {
                 tunerActive = false;
-                if (mediaStream) {
-                    mediaStream.getTracks().forEach(track => track.stop());
-                }
+                if (mediaStream) mediaStream.getTracks().forEach(track => track.stop());
                 cancelAnimationFrame(animationFrameId);
                 tunerNote.textContent = "--";
                 tunerDetails.textContent = "Microfone desligado";
-                smoothedNeedlePos = 50;
-                smoothedCents = 0;
                 tunerNeedle.style.left = "50%";
                 tunerDisplayBox.style.borderColor = "#323238";
                 tunerDisplayBox.style.boxShadow = "none";
@@ -1007,11 +888,6 @@
                 startTunerBtn.textContent = 'Ligar Microfone';
                 startTunerBtn.style.backgroundColor = '#323238';
             }
-        });
-
-        window.addEventListener('beforeunload', () => {
-            if (worker) worker.terminate();
-            if (workerUrl) URL.revokeObjectURL(workerUrl);
         });
     </script>
 </body>
