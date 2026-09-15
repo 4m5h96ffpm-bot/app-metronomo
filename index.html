@@ -21,7 +21,6 @@
             margin: 0;
             padding: 0;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            /* Evita zoom e atrasos de duplo toque no iOS */
             touch-action: manipulation; 
             -webkit-tap-highlight-color: transparent;
         }
@@ -477,7 +476,7 @@
 
     </div>
 
-    <!-- Elemento de áudio otimizado para manter o iOS acordado em background -->
+    <!-- Elemento de áudio para manter a thread ativa no iOS -->
     <audio id="silentAudio" loop playsinline preload="auto" style="display:none;">
         <source src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=" type="audio/wav">
     </audio>
@@ -528,18 +527,9 @@
         let currentBeat = 0;
         
         let nextNoteTime = 0.0;
-        let worker = null;
-        let scheduleAheadTime = 0.1;
-
-        let wallTimeStart = 0;
-        let audioTimeStart = 0;
-
-        function getSyncedCurrentTime() {
-            if (!audioCtx) return 0;
-            const elapsedWall = (performance.now() - wallTimeStart) / 1000;
-            const calculatedTime = audioTimeStart + elapsedWall;
-            return Math.max(audioCtx.currentTime, calculatedTime);
-        }
+        let timerID = null;
+        let scheduleAheadTime = 0.2; // Agendamento antecipado maior para resistir a bloqueios
+        let lookahead = 25.0;
 
         function updateBeatsVisualizer() {
             beatVisualizer.innerHTML = '';
@@ -555,6 +545,9 @@
             bpm = Math.max(30, Math.min(350, newBpm));
             tempoSlider.value = bpm;
             tempoInput.value = bpm;
+            if (isRunning && 'mediaSession' in navigator) {
+                updateMediaSessionMetadata();
+            }
         }
 
         window.changeBpm = function(amount) {
@@ -615,11 +608,12 @@
             osc.start(time);
             osc.stop(time + 0.05);
 
-            const audioTimeDiff = time - getSyncedCurrentTime();
+            // Atualiza os pontos visuais se a página estiver ativa
+            const audioTimeDiff = time - ctx.currentTime;
             const timeoutDelay = Math.max(0, audioTimeDiff * 1000);
             
             setTimeout(() => {
-                if (!isRunning) return;
+                if (!isRunning || document.hidden) return;
                 const dots = beatVisualizer.querySelectorAll('.dot');
                 dots.forEach((dot, index) => {
                     dot.classList.toggle('active', index === beatNumber);
@@ -628,32 +622,26 @@
         }
 
         function scheduler() {
-            const currentTime = getSyncedCurrentTime();
-            while (nextNoteTime < currentTime + scheduleAheadTime) {
+            if (!audioCtx) return;
+            while (nextNoteTime < audioCtx.currentTime + scheduleAheadTime) {
                 scheduleNote(currentBeat, nextNoteTime);
                 nextNote();
             }
         }
 
-        const workerBlobCode = `
-            let timerID = null;
-            let interval = 25;
-            self.onmessage = function(e) {
-                if (e.data === 'start') {
-                    if (timerID) clearInterval(timerID);
-                    timerID = setInterval(() => { postMessage('tick'); }, interval);
-                } else if (e.data === 'stop') {
-                    clearInterval(timerID);
-                    timerID = null;
-                }
-            };
-        `;
-        const blob = new Blob([workerBlobCode], { type: 'application/javascript' });
-        const workerUrl = URL.createObjectURL(blob);
-
         function setupMediaSession() {
             if ('mediaSession' in navigator) {
                 navigator.mediaSession.playbackState = 'playing';
+                updateMediaSessionMetadata();
+
+                navigator.mediaSession.setActionHandler('play', () => { if (!isRunning) toggleMetronome(); });
+                navigator.mediaSession.setActionHandler('pause', () => { if (isRunning) toggleMetronome(); });
+                navigator.mediaSession.setActionHandler('stop', () => { if (isRunning) toggleMetronome(); });
+            }
+        }
+
+        function updateMediaSessionMetadata() {
+            if ('mediaSession' in navigator) {
                 navigator.mediaSession.metadata = new MediaMetadata({
                     title: `Metrónomo (${bpm} BPM)`,
                     artist: 'Web Metronome',
@@ -664,27 +652,21 @@
 
         function startMetronome() {
             const ctx = getAudioContext();
-            wallTimeStart = performance.now();
-            audioTimeStart = ctx.currentTime;
-
             currentBeat = 0;
-            nextNoteTime = audioTimeStart + 0.05;
+            nextNoteTime = ctx.currentTime + 0.05;
 
-            if (!worker) {
-                worker = new Worker(workerUrl);
-                worker.onmessage = function(e) {
-                    if (e.data === 'tick') scheduler();
-                };
-            }
-            worker.postMessage('start');
+            if (timerID) clearInterval(timerID);
+            timerID = setInterval(scheduler, lookahead);
 
-            // Garante reprodução de áudio em background no iOS
-            silentAudio.play().catch(e => console.log("Áudio silencioso impedido", e));
+            silentAudio.play().catch(e => console.log("Áudio silencioso bloqueado", e));
             setupMediaSession();
         }
 
         function stopMetronome() {
-            if (worker) worker.postMessage('stop');
+            if (timerID) {
+                clearInterval(timerID);
+                timerID = null;
+            }
             currentBeat = 0;
             silentAudio.pause();
             if ('mediaSession' in navigator) {
@@ -698,6 +680,13 @@
             if (ctx.state === 'suspended') {
                 ctx.resume();
             }
+
+            // Impulso inicial para destravar o canal de áudio no iOS
+            const buffer = ctx.createBuffer(1, 1, ctx.sampleRate);
+            const source = ctx.createBufferSource();
+            source.buffer = buffer;
+            source.connect(ctx.destination);
+            source.start(0);
             
             isRunning = !isRunning;
             if (isRunning) {
@@ -847,9 +836,8 @@
         }
 
         startTunerBtn.addEventListener('click', async () => {
-            // Validação de segurança do iOS (exige HTTPS ou localhost)
             if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
-                alert('O iOS restringe o microfone a ligações HTTPS. Se estiver a abrir o ficheiro localmente ("file://") ou por IP sem SSL ("http://"), o Safari bloqueará o acesso.');
+                alert('O iOS restringe o microfone a ligações HTTPS.');
                 return;
             }
 
